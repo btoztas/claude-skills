@@ -7,10 +7,10 @@
   },
   "plugins": [
     {
-      "name": "branch-and-split",
-      "description": "Branch the current Claude Code session and open the branch in a new horizontal terminal split (tmux, iTerm2, or Ghostty).",
+      "name": "bg",
+      "description": "Bruno Goncalves' personal plugin. Bundles branch-and-split (fork the current Claude Code session into a horizontal terminal split).",
       "category": "productivity",
-      "source": "./plugins/branch-and-split"
+      "source": "./plugins/bg"
     }
   ]
 }

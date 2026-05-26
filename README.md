@@ -10,12 +10,13 @@ Add the marketplace once:
 /plugin marketplace add btoztas/claude-skills
 ```
 
-Then install any plugin from it:
+Then install the plugin:
 
 ```
-/plugin install branch-and-split@claude-skills-bruno
+/plugin install bg@claude-skills-bruno
 ```
 
 ## Plugins
 
-- **[branch-and-split](plugins/branch-and-split/)** — Branch the current Claude Code session and open it in a new horizontal terminal split (tmux, iTerm2, Ghostty).
+- **[bg](plugins/bg/)** — Bruno's personal plugin. Skills:
+  - `/bg:branch-and-split` — Branch the current Claude Code session and open it in a new horizontal terminal split (tmux, iTerm2, Ghostty).

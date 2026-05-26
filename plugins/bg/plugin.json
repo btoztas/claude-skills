@@ -1,0 +1,7 @@
+{
+  "name": "bg",
+  "description": "Bruno Goncalves' personal Claude Code plugin. Currently bundles: branch-and-split.",
+  "author": {
+    "name": "Bruno Goncalves"
+  }
+}
