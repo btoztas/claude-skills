@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "bg",
-      "description": "Bruno Goncalves' personal plugin. Bundles branch-and-split (fork the current Claude Code session into a horizontal terminal split).",
+      "description": "Bruno's personal Claude Code skills. Includes branch-and-split (fork the current session into a new horizontal terminal split).",
       "category": "productivity",
       "source": "./plugins/bg"
     }

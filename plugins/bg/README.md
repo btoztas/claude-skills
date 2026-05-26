@@ -1,15 +1,21 @@
-# branch-and-split
+# bg
+
+Bruno's personal Claude Code skills.
+
+## Skills
+
+### branch-and-split
 
 Branch the current Claude Code session and open the branch in a new horizontal terminal split. The current pane keeps the original session; the new split below starts a fresh branch (a fork of the conversation up to this point).
 
-## Requirements
+**Requirements:**
 
 - Claude Code with the `--fork-session` flag (recent versions)
 - One of: tmux, iTerm2, or Ghostty 1.3+ (macOS)
 
-## Usage
+**Usage:**
 
-Run `/branch-and-split` from anywhere in a Claude Code session.
+Run `/bg:branch-and-split` from anywhere in a Claude Code session.
 
 The skill auto-detects the terminal in this priority order:
 
