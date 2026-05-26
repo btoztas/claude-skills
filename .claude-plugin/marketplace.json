@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-skills-bruno",
+  "description": "Personal Claude Code skills by Bruno Goncalves.",
+  "owner": {
+    "name": "Bruno Goncalves"
+  },
+  "plugins": [
+    {
+      "name": "branch-and-split",
+      "description": "Branch the current Claude Code session and open the branch in a new horizontal terminal split (tmux, iTerm2, or Ghostty).",
+      "category": "productivity",
+      "source": "./plugins/branch-and-split"
+    }
+  ]
+}

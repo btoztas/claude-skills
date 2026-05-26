@@ -1,0 +1,7 @@
+{
+  "name": "branch-and-split",
+  "description": "Branch the current Claude Code session and open the branch in a new horizontal terminal split. Supports tmux, iTerm2, and Ghostty.",
+  "author": {
+    "name": "Bruno Goncalves"
+  }
+}
