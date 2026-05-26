@@ -15,7 +15,8 @@ Branch the current Claude Code session and open the branch in a new horizontal t
 
 **Usage:**
 
-Run `/bg:branch-and-split` from anywhere in a Claude Code session.
+- `/bg:branch-and-split` — open one split with a fork
+- `/bg:branch-and-split N` — open N splits, each an independent fork (default 1, max 10)
 
 The skill auto-detects the terminal in this priority order:
 
