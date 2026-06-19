@@ -1,0 +1,7 @@
+{
+  "name": "pr-watch",
+  "description": "Poll GitHub for new pull requests from a configured set of authors, review each new one with whatever review skills are installed (or a built-in review), save an HTML report, and send a notification. Self-schedules on an interval.",
+  "author": {
+    "name": "Bruno Goncalves"
+  }
+}
