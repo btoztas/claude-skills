@@ -20,3 +20,4 @@ Then install any plugin from it:
 
 - **[bg](plugins/bg/)** — Bruno's personal skills.
   - `/bg:branch-and-split` — Branch the current Claude Code session and open it in a new horizontal terminal split (tmux, iTerm2, Ghostty).
+  - `/bg:pr-watch` — Poll GitHub for new pull requests from a set of authors, review each new one (HTML report + notification), and reschedule itself on an interval.

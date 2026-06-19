@@ -1,6 +1,6 @@
 ---
-name: watch
-description: Poll GitHub for new pull requests from a configured set of authors, review each new one, save an HTML report, and notify. Run "/pr-watch:watch" to start - it self-schedules on an interval. Pass a directory to use as the reviews folder, e.g. "/pr-watch:watch ~/pr-reviews".
+name: pr-watch
+description: Poll GitHub for new pull requests from a configured set of authors, review each new one, save an HTML report, and notify. Run "/bg:pr-watch" to start - it self-schedules on an interval. Pass a directory to use as the reviews folder, e.g. "/bg:pr-watch ~/pr-reviews".
 user_invocable: true
 model: sonnet
 allowed-tools:
@@ -15,7 +15,7 @@ allowed-tools:
   - mcp__plugin_slack_slack__slack_send_message
 ---
 
-# pr-watch:watch
+# bg:pr-watch
 
 Polls GitHub for open PRs matching a configured search, finds the ones that appeared since the last poll, spawns a review subagent for each, saves an HTML report next to the config, sends a notification, and reschedules itself.
 
@@ -26,7 +26,7 @@ Be concise in your turn output. The work is mostly bash plus subagents; do not n
 ## Step 1 - Resolve the reviews directory and load config
 
 The reviews directory is resolved in this order:
-1. The first argument to the skill, if given (e.g. `/pr-watch:watch ~/dd/tasks/pr-reviews`).
+1. The first argument to the skill, if given (e.g. `/bg:pr-watch ~/dd/tasks/pr-reviews`).
 2. The `$PR_WATCH_DIR` environment variable, if set.
 3. Default: `~/pr-reviews`.
 
@@ -148,7 +148,7 @@ A new PR whose review failed is intentionally left out of `seen_prs`, so it is r
 
 Reschedule the next poll. Read `interval_seconds` from config (default `600`). Pass the resolved reviews directory back as the argument so the location persists across polls.
 
-Call `ScheduleWakeup` with `delaySeconds` = `interval_seconds`, `prompt` = `/pr-watch:watch <REVIEWS_DIR>`, and a short `reason` such as "polling team PRs every 10m".
+Call `ScheduleWakeup` with `delaySeconds` = `interval_seconds`, `prompt` = `/bg:pr-watch <REVIEWS_DIR>`, and a short `reason` such as "polling team PRs every 10m".
 
 Then end the turn with a one-line summary: how many new PRs were reviewed and when the next poll fires.
 
@@ -186,64 +186,143 @@ Defaults when a field is omitted: `search.per_page` 100, `interval_seconds` 600,
 
 ### HTML report structure
 
+Produce a single self-contained HTML file (all CSS inline, no external assets) so it opens cleanly from disk. Aim for a fresh, scannable, modern look that makes the review inviting. Use the template below as the baseline and fill in every `{placeholder}`. Keep the structure and classes; you may extend the content but do not strip the styling.
+
+Fill the four `{n_*}` counters with the real number of findings in each bucket. Repeat the finding-card and `top5` `<li>` blocks as needed. Use the severity classes (`crit`, `imp`, `sug`) consistently.
+
 ```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PR Review: {title}</title>
+  <title>PR Review · {title}</title>
   <style>
-    :root { color-scheme: light dark; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; line-height: 1.55; }
-    header table { border-collapse: collapse; margin: 1rem 0; }
-    header th { text-align: left; padding-right: 1rem; vertical-align: top; opacity: 0.7; font-weight: 600; }
-    h1 { font-size: 1.5rem; }
-    h2 { margin-top: 2rem; border-bottom: 1px solid currentColor; padding-bottom: 0.25rem; }
-    code { background: rgba(127,127,127,0.18); padding: 0.1em 0.35em; border-radius: 4px; }
-    .crit { color: #d11; } .imp { color: #c80; } .sug { opacity: 0.85; }
-    ol li, ul li { margin: 0.4rem 0; }
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f8fa; --card: #ffffff; --ink: #1f2328; --muted: #656d76; --line: #d0d7de;
+      --accent: #6e40c9; --accent2: #4493f8;
+      --crit: #cf222e; --crit-bg: #ffebe9; --imp: #bc4c00; --imp-bg: #fff1e5;
+      --sug: #1a7f37; --sug-bg: #e6f4ea; --add: #1a7f37; --del: #cf222e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117; --card: #161b22; --ink: #e6edf3; --muted: #9198a1; --line: #30363d;
+        --accent: #bc8cff; --accent2: #58a6ff;
+        --crit: #ff7b72; --crit-bg: #2d1416; --imp: #ffa657; --imp-bg: #2a1c0f;
+        --sug: #3fb950; --sug-bg: #11261a; --add: #3fb950; --del: #ff7b72;
+      }
+    }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--ink); margin: 0; line-height: 1.6;
+      -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    .hero { background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 16px; padding: 1.75rem 1.5rem; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+    .hero .eyebrow { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; opacity: .85; margin: 0 0 .4rem; }
+    .hero h1 { font-size: 1.55rem; margin: 0 0 1rem; line-height: 1.3; }
+    .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
+    .chip { background: rgba(255,255,255,0.18); border-radius: 999px; padding: .25rem .7rem; font-size: .82rem; backdrop-filter: blur(4px); }
+    .chip b { font-weight: 700; }
+    .cta { display: inline-flex; align-items: center; gap: .4rem; background: #fff; color: #1f2328;
+      font-weight: 600; text-decoration: none; padding: .55rem 1.1rem; border-radius: 8px; font-size: .9rem; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+    .cta:hover { transform: translateY(-1px); }
+    .scoreboard { display: flex; gap: .75rem; flex-wrap: wrap; margin: 1.5rem 0; }
+    .score { flex: 1 1 120px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; }
+    .score .n { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+    .score .l { font-size: .78rem; color: var(--muted); margin-top: .3rem; text-transform: uppercase; letter-spacing: .04em; }
+    .score.crit .n { color: var(--crit); } .score.imp .n { color: var(--imp); } .score.sug .n { color: var(--sug); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.4rem; margin: 1rem 0; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 .25rem; }
+    .sub { color: var(--muted); font-size: .85rem; margin: 0 0 .75rem; }
+    a { color: var(--accent2); }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em;
+      background: rgba(127,127,127,0.16); padding: .12em .4em; border-radius: 5px; }
+    .meta { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; color: var(--muted); font-size: .85rem; margin-top: 1rem; }
+    .meta a { color: var(--muted); }
+    ol.top5 { list-style: none; counter-reset: t; padding: 0; margin: 0; }
+    ol.top5 li { counter-increment: t; position: relative; padding: .8rem 1rem .8rem 3rem; border: 1px solid var(--line);
+      border-radius: 10px; margin-bottom: .6rem; background: var(--card); }
+    ol.top5 li::before { content: counter(t); position: absolute; left: .9rem; top: .8rem;
+      width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--accent); color: #fff;
+      font-size: .85rem; font-weight: 700; display: grid; place-items: center; }
+    .pill { display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      padding: .12rem .5rem; border-radius: 999px; vertical-align: middle; margin-right: .4rem; }
+    .pill.crit { color: var(--crit); background: var(--crit-bg); }
+    .pill.imp { color: var(--imp); background: var(--imp-bg); }
+    .pill.sug { color: var(--sug); background: var(--sug-bg); }
+    .finding { border-left: 4px solid var(--line); padding: .25rem 0 .25rem 1rem; margin: 1rem 0; }
+    .finding.crit { border-color: var(--crit); } .finding.imp { border-color: var(--imp); } .finding.sug { border-color: var(--sug); }
+    .finding h4 { margin: 0 0 .3rem; font-size: .98rem; }
+    .finding .loc { font-size: .8rem; color: var(--muted); }
+    .finding .fix { margin-top: .5rem; }
+    .empty { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>{title}</h1>
-    <table>
-      <tr><th>Author</th><td>{author}</td></tr>
-      <tr><th>Repository</th><td><a href="{repo_url}">{repo}</a></td></tr>
-      <tr><th>Pull Request</th><td><a href="{pr_url}">{pr_url}</a></td></tr>
-      <tr><th>Reviewed</th><td>{datetime}</td></tr>
-      <tr><th>Tickets</th><td>{ticket_links_or_dash}</td></tr>
-    </table>
-  </header>
+  <div class="wrap">
+    <div class="hero">
+      <p class="eyebrow">Pull Request Review</p>
+      <h1>{title}</h1>
+      <div class="chips">
+        <span class="chip">👤 <b>{author}</b></span>
+        <span class="chip">📦 {repo}</span>
+        <span class="chip" style="color:#caffbf">+{additions}</span>
+        <span class="chip" style="color:#ffc9c9">-{deletions}</span>
+        <span class="chip">📄 {changed_files} files</span>
+      </div>
+      <a class="cta" href="{pr_url}">Open PR on GitHub →</a>
+    </div>
 
-  <section id="context">
+    <div class="scoreboard">
+      <div class="score crit"><div class="n">{n_critical}</div><div class="l">Critical</div></div>
+      <div class="score imp"><div class="n">{n_important}</div><div class="l">Important</div></div>
+      <div class="score sug"><div class="n">{n_suggestions}</div><div class="l">Suggestions</div></div>
+    </div>
+
     <h2>Context</h2>
-    <p>{2-3 sentence summary of what the PR does, why it exists, and what it touches}</p>
-  </section>
+    <div class="card">
+      <p>{2-3 sentence summary of what the PR does, why it exists, and what it touches}</p>
+    </div>
 
-  <section id="top5">
     <h2>Top 5 Actions</h2>
-    <ol>
-      <li><strong class="crit">[CRITICAL]</strong> {finding} - <code>file:line</code></li>
-      <!-- ranked highest priority first; use crit/imp classes -->
+    <p class="sub">The highest-impact things to look at first.</p>
+    <ol class="top5">
+      <li><span class="pill crit">Critical</span>{finding} <code>file:line</code></li>
+      <!-- repeat, ranked highest priority first; use crit/imp/sug pills -->
     </ol>
-  </section>
 
-  <section id="review">
     <h2>Full Review</h2>
-    <h3 class="crit">Critical</h3>
-    <ul><!-- finding, file:line, suggested fix --></ul>
-    <h3 class="imp">Important</h3>
-    <ul></ul>
-    <h3 class="sug">Suggestions</h3>
-    <ul></ul>
-  </section>
+
+    <h3>🔴 Critical</h3>
+    <div class="finding crit">
+      <h4>{finding title}</h4>
+      <div class="loc"><code>file:line</code></div>
+      <p>{what is wrong and why it matters}</p>
+      <div class="fix">{suggested fix}</div>
+    </div>
+    <!-- repeat; if none: <p class="empty">No critical issues found.</p> -->
+
+    <h3>🟠 Important</h3>
+    <div class="finding imp"> ... </div>
+    <!-- repeat; if none: <p class="empty">Nothing important flagged.</p> -->
+
+    <h3>🟢 Suggestions</h3>
+    <div class="finding sug"> ... </div>
+    <!-- repeat; if none: <p class="empty">No further suggestions.</p> -->
+
+    <div class="meta">
+      <span>Reviewed {datetime}</span>
+      <span><a href="{pr_url}">{pr_url}</a></span>
+      <span>Tickets: {ticket_links_or_dash}</span>
+    </div>
+  </div>
 </body>
 </html>
 ```
 
-Omit the Tickets row (or show a dash) when no tickets are found. When `issue_tracker.base_url` is null, show ticket IDs as plain text.
+The emoji in the chips and section headers are part of the report UI (they help scanning), not documentation prose, so they are fine here. Show a dash for Tickets when none are found; when `issue_tracker.base_url` is null, render ticket IDs as plain text.
 
 ### Notification template
 

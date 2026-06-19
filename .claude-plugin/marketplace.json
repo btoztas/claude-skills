@@ -8,15 +8,9 @@
   "plugins": [
     {
       "name": "bg",
-      "description": "Bruno's personal Claude Code skills. Includes branch-and-split (fork the current session into a new horizontal terminal split).",
+      "description": "Bruno's personal Claude Code skills. Includes branch-and-split (fork the current session into a new horizontal terminal split) and pr-watch (watch GitHub for new team PRs and review them automatically).",
       "category": "productivity",
       "source": "./plugins/bg"
-    },
-    {
-      "name": "pr-watch",
-      "description": "Poll GitHub for new pull requests from a configured set of authors, review each new one, save an HTML report, and notify. Self-schedules on an interval.",
-      "category": "productivity",
-      "source": "./plugins/pr-watch"
     }
   ]
 }
