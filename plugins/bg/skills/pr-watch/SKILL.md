@@ -114,13 +114,17 @@ Build each subagent's prompt from the template below, substituting the PR fields
 >
 > 5. Write the HTML report (use the exact structure in the skill's Appendix) to:
 >    `<REVIEWS_DIR>/<YYYY-MM-DD>_<repo>_<author>_<slug>.html`
->    where `<slug>` is the first ~5 words of the title, lowercased and kebab-cased (strip the ticket prefix and punctuation). Use today's date. The report must include: a Context section (2-3 sentences on what the PR does and why), a Top 5 Actions list (the highest-priority findings), and the Full Review grouped into Critical / Important / Suggestions. Follow these writing conventions: friendly and clear, no emojis, no em-dashes, do not assume the PR is production-ready, hyperlink any tickets.
+>    where `<slug>` is the first ~5 words of the title, lowercased and kebab-cased (strip the ticket prefix and punctuation). Use today's date.
+>
+>    The report is a working tool for a programmer reviewing the PR, so prioritise functional content over decoration. Each finding card MUST include: the severity, a short title, a clickable `file:line` link to the exact line on GitHub (`https://github.com/<headRepositoryOwner>/<repo>/blob/<headRefName>/<path>#L<line>`), a real code excerpt of the offending lines pulled from the worktree (not a paraphrase), a clear explanation of the problem and its impact, and a concrete suggested fix as a code block. Also include a Context section, a Top Actions list (each item linking to its finding), a Changed files list (each path linking to the file in the PR with its +/- counts), and a per-file collapsible diff section built from `gh pr diff`. HTML-escape every code excerpt and diff (`&` -> `&amp;`, `<` -> `&lt;`, `>` -> `&gt;`); colour added/removed diff lines. For a very large file, include a truncated diff with a note and the GitHub link rather than omitting it silently.
+>
+>    Writing conventions for prose: clear and direct, no emojis in prose (the template's UI emojis and diff markers are fine), no em-dashes, do not assume the PR is production-ready, hyperlink any tickets.
 >
 > 6. Clean up the worktree: `git -C "$REPO_PATH" worktree remove "$WT" --force` and `git -C "$REPO_PATH" branch -D pr-<number>` (ignore errors).
 >
-> 7. Notify, based on the notify type:
->    - `slack`: find the recipient with `mcp__plugin_slack_slack__slack_search_users` (query = the configured recipient name), then `mcp__plugin_slack_slack__slack_send_message` to their DM. Keep it very brief - see the skill's notification template.
->    - `webhook`: `curl -fsS -X POST -H 'Content-Type: application/json' -d '<json>' "<webhook_url>"` with fields `{title, author, repo, summary, pr_url, report_path}`.
+> 7. Notify, based on the notify type. First build the review link as a `file://` URL from the absolute report path (e.g. `file:///Users/you/pr-reviews/2026-06-19_repo_author_slug.html`) so it opens in the browser.
+>    - `slack`: find the recipient with `mcp__plugin_slack_slack__slack_search_users` (query = the configured recipient name), then `mcp__plugin_slack_slack__slack_send_message` to their DM, using the markdown layout in the skill's notification template (title, subtitle, summary, findings line, and clickable Review and PR links).
+>    - `webhook`: `curl -fsS -X POST -H 'Content-Type: application/json' -d '<json>' "<webhook_url>"` with fields `{title, author, repo, summary, pr_url, report_path, file_url}`.
 >    - `none`: skip.
 >
 > 8. Return a one-line status: the PR URL, the saved report filename, and whether the notification was sent. If you could not save a report, say so and why.
@@ -186,9 +190,14 @@ Defaults when a field is omitted: `search.per_page` 100, `interval_seconds` 600,
 
 ### HTML report structure
 
-Produce a single self-contained HTML file (all CSS inline, no external assets) so it opens cleanly from disk. Aim for a fresh, scannable, modern look that makes the review inviting. Use the template below as the baseline and fill in every `{placeholder}`. Keep the structure and classes; you may extend the content but do not strip the styling.
+Produce a single self-contained HTML file (all CSS inline, no external assets) so it opens cleanly from disk. This is a working review tool, so density and function come before decoration. Use the template below as the baseline and fill in every `{placeholder}`. Keep the structure and classes; add finding cards, top-action items, file rows, and diff blocks as needed.
 
-Fill the four `{n_*}` counters with the real number of findings in each bucket. Repeat the finding-card and `top5` `<li>` blocks as needed. Use the severity classes (`crit`, `imp`, `sug`) consistently.
+Rules:
+- Every finding is a `<details class="f ...">` card containing the real offending code (`pre.code`), a clickable `file:line` link to GitHub, the problem, and a concrete fix (`pre.code`). Keep Critical and Important cards `open`; Suggestions may be collapsed.
+- The `{n_*}` counters in the nav must be the real counts, and each nav tile links to its section anchor.
+- HTML-escape all code and diff text (`&` -> `&amp;`, `<` -> `&lt;`, `>` -> `&gt;`).
+- In diff blocks, wrap each line: added in `<span class="a">`, removed in `<span class="d">`, hunk headers in `<span class="h">`, context lines plain.
+- GitHub line link: `https://github.com/{headRepositoryOwner}/{repo}/blob/{headRefName}/{path}#L{line}`. File link in the Changed files list: same without the `#L`.
 
 ```html
 <!DOCTYPE html>
@@ -198,137 +207,154 @@ Fill the four `{n_*}` counters with the real number of findings in each bucket. 
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PR Review · {title}</title>
   <style>
-    :root {
-      color-scheme: light dark;
-      --bg: #f6f8fa; --card: #ffffff; --ink: #1f2328; --muted: #656d76; --line: #d0d7de;
-      --accent: #6e40c9; --accent2: #4493f8;
-      --crit: #cf222e; --crit-bg: #ffebe9; --imp: #bc4c00; --imp-bg: #fff1e5;
-      --sug: #1a7f37; --sug-bg: #e6f4ea; --add: #1a7f37; --del: #cf222e;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117; --card: #161b22; --ink: #e6edf3; --muted: #9198a1; --line: #30363d;
-        --accent: #bc8cff; --accent2: #58a6ff;
-        --crit: #ff7b72; --crit-bg: #2d1416; --imp: #ffa657; --imp-bg: #2a1c0f;
-        --sug: #3fb950; --sug-bg: #11261a; --add: #3fb950; --del: #ff7b72;
-      }
-    }
+    :root { color-scheme: light dark;
+      --bg:#f6f8fa; --card:#fff; --ink:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da;
+      --crit:#cf222e; --crit-bg:#ffebe9; --imp:#bc4c00; --imp-bg:#fff1e5; --sug:#1a7f37; --sug-bg:#dafbe1;
+      --code:#f6f8fa; --add-bg:#e6ffec; --add-ink:#1a7f37; --del-bg:#ffebe9; --del-ink:#cf222e; }
+    @media (prefers-color-scheme: dark) { :root {
+      --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#9198a1; --line:#30363d; --accent:#58a6ff;
+      --crit:#ff7b72; --crit-bg:#2d1416; --imp:#ffa657; --imp-bg:#2a1c0f; --sug:#3fb950; --sug-bg:#11261a;
+      --code:#0d1117; --add-bg:#12261a; --add-ink:#3fb950; --del-bg:#2d1416; --del-ink:#ff7b72; } }
     * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg); color: var(--ink); margin: 0; line-height: 1.6;
-      -webkit-font-smoothing: antialiased; }
-    .wrap { max-width: 880px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
-    .hero { background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 16px; padding: 1.75rem 1.5rem; color: #fff; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
-    .hero .eyebrow { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; opacity: .85; margin: 0 0 .4rem; }
-    .hero h1 { font-size: 1.55rem; margin: 0 0 1rem; line-height: 1.3; }
-    .chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
-    .chip { background: rgba(255,255,255,0.18); border-radius: 999px; padding: .25rem .7rem; font-size: .82rem; backdrop-filter: blur(4px); }
-    .chip b { font-weight: 700; }
-    .cta { display: inline-flex; align-items: center; gap: .4rem; background: #fff; color: #1f2328;
-      font-weight: 600; text-decoration: none; padding: .55rem 1.1rem; border-radius: 8px; font-size: .9rem; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
-    .cta:hover { transform: translateY(-1px); }
-    .scoreboard { display: flex; gap: .75rem; flex-wrap: wrap; margin: 1.5rem 0; }
-    .score { flex: 1 1 120px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: .9rem 1rem; }
-    .score .n { font-size: 1.7rem; font-weight: 800; line-height: 1; }
-    .score .l { font-size: .78rem; color: var(--muted); margin-top: .3rem; text-transform: uppercase; letter-spacing: .04em; }
-    .score.crit .n { color: var(--crit); } .score.imp .n { color: var(--imp); } .score.sug .n { color: var(--sug); }
-    .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem 1.4rem; margin: 1rem 0; }
-    h2 { font-size: 1.15rem; margin: 2rem 0 .25rem; }
-    .sub { color: var(--muted); font-size: .85rem; margin: 0 0 .75rem; }
-    a { color: var(--accent2); }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em;
-      background: rgba(127,127,127,0.16); padding: .12em .4em; border-radius: 5px; }
-    .meta { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; color: var(--muted); font-size: .85rem; margin-top: 1rem; }
-    .meta a { color: var(--muted); }
-    ol.top5 { list-style: none; counter-reset: t; padding: 0; margin: 0; }
-    ol.top5 li { counter-increment: t; position: relative; padding: .8rem 1rem .8rem 3rem; border: 1px solid var(--line);
-      border-radius: 10px; margin-bottom: .6rem; background: var(--card); }
-    ol.top5 li::before { content: counter(t); position: absolute; left: .9rem; top: .8rem;
-      width: 1.5rem; height: 1.5rem; border-radius: 50%; background: var(--accent); color: #fff;
-      font-size: .85rem; font-weight: 700; display: grid; place-items: center; }
-    .pill { display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
-      padding: .12rem .5rem; border-radius: 999px; vertical-align: middle; margin-right: .4rem; }
-    .pill.crit { color: var(--crit); background: var(--crit-bg); }
-    .pill.imp { color: var(--imp); background: var(--imp-bg); }
-    .pill.sug { color: var(--sug); background: var(--sug-bg); }
-    .finding { border-left: 4px solid var(--line); padding: .25rem 0 .25rem 1rem; margin: 1rem 0; }
-    .finding.crit { border-color: var(--crit); } .finding.imp { border-color: var(--imp); } .finding.sug { border-color: var(--sug); }
-    .finding h4 { margin: 0 0 .3rem; font-size: .98rem; }
-    .finding .loc { font-size: .8rem; color: var(--muted); }
-    .finding .fix { margin-top: .5rem; }
-    .empty { color: var(--muted); font-style: italic; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); margin:0; line-height:1.55; }
+    .wrap { max-width:1080px; margin:0 auto; padding:1.5rem 1.25rem 4rem; }
+    a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+    code,pre,.mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .head { border:1px solid var(--line); border-radius:10px; background:var(--card); padding:1.1rem 1.25rem; }
+    .head h1 { font-size:1.3rem; margin:.15rem 0 .6rem; }
+    .head .meta { display:flex; flex-wrap:wrap; gap:.4rem .9rem; font-size:.85rem; color:var(--muted); align-items:center; }
+    .head .meta b { color:var(--ink); }
+    .btn { display:inline-block; background:var(--accent); color:#fff; padding:.4rem .8rem; border-radius:6px; font-weight:600; }
+    .btn:hover { text-decoration:none; opacity:.92; }
+    .add { color:var(--sug); } .del { color:var(--crit); } .stat { font-variant-numeric:tabular-nums; }
+    .nav { display:flex; gap:.6rem; flex-wrap:wrap; margin:1rem 0; }
+    .nav a { flex:1 1 110px; border:1px solid var(--line); border-radius:8px; background:var(--card); padding:.6rem .8rem; color:var(--ink); }
+    .nav a:hover { text-decoration:none; border-color:var(--accent); }
+    .nav .n { font-size:1.4rem; font-weight:800; line-height:1; } .nav .l { font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin-top:.2rem; }
+    .nav .crit .n { color:var(--crit); } .nav .imp .n { color:var(--imp); } .nav .sug .n { color:var(--sug); }
+    h2 { font-size:1.05rem; margin:1.8rem 0 .6rem; padding-bottom:.3rem; border-bottom:1px solid var(--line); }
+    .context { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:1rem 1.2rem; }
+    ol.top { padding-left:1.2rem; } ol.top li { margin:.35rem 0; }
+    .pill { font-size:.65rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:.12rem .5rem; border-radius:999px; white-space:nowrap; }
+    .pill.crit { color:var(--crit); background:var(--crit-bg); } .pill.imp { color:var(--imp); background:var(--imp-bg); } .pill.sug { color:var(--sug); background:var(--sug-bg); }
+    .f { border:1px solid var(--line); border-left-width:4px; border-radius:8px; background:var(--card); margin:.8rem 0; }
+    .f.crit { border-left-color:var(--crit); } .f.imp { border-left-color:var(--imp); } .f.sug { border-left-color:var(--sug); }
+    .f>summary { list-style:none; cursor:pointer; padding:.7rem 1rem; display:flex; gap:.6rem; align-items:baseline; }
+    .f>summary::-webkit-details-marker { display:none; }
+    .f .ftitle { font-weight:600; font-size:.95rem; } .f .loc { font-size:.8rem; color:var(--muted); margin-left:auto; }
+    .f .body { padding:0 1rem 1rem; }
+    .label { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin:.9rem 0 .3rem; }
+    pre.code { background:var(--code); border:1px solid var(--line); border-radius:6px; padding:.7rem .9rem; overflow-x:auto; font-size:.82rem; line-height:1.45; margin:.2rem 0; white-space:pre; }
+    pre.code .a { color:var(--add-ink); background:var(--add-bg); display:block; }
+    pre.code .d { color:var(--del-ink); background:var(--del-bg); display:block; }
+    pre.code .h { color:var(--muted); display:block; }
+    .files { border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+    .files .row { display:flex; justify-content:space-between; gap:1rem; padding:.45rem .9rem; border-top:1px solid var(--line); font-size:.85rem; }
+    .files .row:first-child { border-top:none; }
+    details.diff { border:1px solid var(--line); border-radius:8px; margin:.6rem 0; background:var(--card); }
+    details.diff>summary { cursor:pointer; padding:.55rem .9rem; font-size:.83rem; }
+    details.diff pre.code { border:none; border-top:1px solid var(--line); border-radius:0; margin:0; }
+    .foot { margin-top:2rem; color:var(--muted); font-size:.82rem; display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; }
+    .empty { color:var(--muted); font-style:italic; padding:.5rem 0; }
   </style>
 </head>
-<body>
-  <div class="wrap">
-    <div class="hero">
-      <p class="eyebrow">Pull Request Review</p>
-      <h1>{title}</h1>
-      <div class="chips">
-        <span class="chip">👤 <b>{author}</b></span>
-        <span class="chip">📦 {repo}</span>
-        <span class="chip" style="color:#caffbf">+{additions}</span>
-        <span class="chip" style="color:#ffc9c9">-{deletions}</span>
-        <span class="chip">📄 {changed_files} files</span>
-      </div>
-      <a class="cta" href="{pr_url}">Open PR on GitHub →</a>
-    </div>
+<body><div class="wrap">
 
-    <div class="scoreboard">
-      <div class="score crit"><div class="n">{n_critical}</div><div class="l">Critical</div></div>
-      <div class="score imp"><div class="n">{n_important}</div><div class="l">Important</div></div>
-      <div class="score sug"><div class="n">{n_suggestions}</div><div class="l">Suggestions</div></div>
-    </div>
-
-    <h2>Context</h2>
-    <div class="card">
-      <p>{2-3 sentence summary of what the PR does, why it exists, and what it touches}</p>
-    </div>
-
-    <h2>Top 5 Actions</h2>
-    <p class="sub">The highest-impact things to look at first.</p>
-    <ol class="top5">
-      <li><span class="pill crit">Critical</span>{finding} <code>file:line</code></li>
-      <!-- repeat, ranked highest priority first; use crit/imp/sug pills -->
-    </ol>
-
-    <h2>Full Review</h2>
-
-    <h3>🔴 Critical</h3>
-    <div class="finding crit">
-      <h4>{finding title}</h4>
-      <div class="loc"><code>file:line</code></div>
-      <p>{what is wrong and why it matters}</p>
-      <div class="fix">{suggested fix}</div>
-    </div>
-    <!-- repeat; if none: <p class="empty">No critical issues found.</p> -->
-
-    <h3>🟠 Important</h3>
-    <div class="finding imp"> ... </div>
-    <!-- repeat; if none: <p class="empty">Nothing important flagged.</p> -->
-
-    <h3>🟢 Suggestions</h3>
-    <div class="finding sug"> ... </div>
-    <!-- repeat; if none: <p class="empty">No further suggestions.</p> -->
-
+  <div class="head">
+    <div class="meta"><span class="pill {verdict_class}">{verdict_label}</span><span>Pull Request Review</span></div>
+    <h1>{title}</h1>
     <div class="meta">
-      <span>Reviewed {datetime}</span>
-      <span><a href="{pr_url}">{pr_url}</a></span>
-      <span>Tickets: {ticket_links_or_dash}</span>
+      <span>👤 <b>{author}</b></span>
+      <span>📦 <b>{repo}</b></span>
+      <span class="mono">{base_ref} ← {head_ref}</span>
+      <span class="stat"><span class="add">+{additions}</span> <span class="del">−{deletions}</span> · {changed_files} files</span>
+      <span>🎫 {ticket_links_or_dash}</span>
+      <span><a class="btn" href="{pr_url}">Open PR on GitHub ↗</a></span>
     </div>
   </div>
-</body>
+
+  <div class="nav">
+    <a class="crit" href="#critical"><div class="n">{n_critical}</div><div class="l">Critical</div></a>
+    <a class="imp" href="#important"><div class="n">{n_important}</div><div class="l">Important</div></a>
+    <a class="sug" href="#suggestions"><div class="n">{n_suggestions}</div><div class="l">Suggestions</div></a>
+  </div>
+
+  <h2>Context</h2>
+  <div class="context"><p>{2-4 sentences: what the PR does, why, what it touches, and the overall assessment}</p></div>
+
+  <h2>Top actions</h2>
+  <ol class="top">
+    <li><span class="pill crit">Critical</span> {short finding} — <a href="#{anchor}">{file}:{line}</a></li>
+    <!-- ranked highest priority first; link each to its finding card anchor -->
+  </ol>
+
+  <h2 id="critical">Critical</h2>
+  <details class="f crit" id="{anchor}" open>
+    <summary><span class="pill crit">Critical</span><span class="ftitle">{finding title}</span><span class="loc mono">{file}:{line}</span></summary>
+    <div class="body">
+      <div class="label">Location</div>
+      <a class="mono" href="{github_line_url}">{file}:{line} ↗</a>
+      <div class="label">Code</div>
+      <pre class="code">{escaped offending code excerpt, the real lines}</pre>
+      <div class="label">Problem</div>
+      <p>{what is wrong and the concrete impact}</p>
+      <div class="label">Suggested fix</div>
+      <pre class="code">{escaped fix: replacement code or a diff}</pre>
+    </div>
+  </details>
+  <!-- repeat; if none: <p class="empty">No critical issues found.</p> -->
+
+  <h2 id="important">Important</h2>
+  <details class="f imp" id="{anchor}" open> ... same inner structure ... </details>
+  <!-- repeat; if none: <p class="empty">Nothing important flagged.</p> -->
+
+  <h2 id="suggestions">Suggestions</h2>
+  <details class="f sug" id="{anchor}"> ... same inner structure ... </details>
+  <!-- repeat; if none: <p class="empty">No further suggestions.</p> -->
+
+  <h2>Changed files</h2>
+  <div class="files">
+    <div class="row"><a class="mono" href="{github_file_url}">{path}</a><span class="stat"><span class="add">+{adds}</span> <span class="del">−{dels}</span></span></div>
+    <!-- repeat per changed file -->
+  </div>
+
+  <h2>Diff</h2>
+  <details class="diff">
+    <summary class="mono"><b>{path}</b> <span class="stat"><span class="add">+{adds}</span> <span class="del">−{dels}</span></span></summary>
+    <pre class="code"><span class="h">@@ -1,4 +1,5 @@</span><span class="d">- old line</span><span class="a">+ new line</span> context line
+</pre>
+  </details>
+  <!-- repeat per changed file; for very large files include a truncated diff with a note and the GitHub link -->
+
+  <div class="foot">
+    <span>Reviewed {datetime}</span>
+    <span><a href="{pr_url}">{pr_url}</a></span>
+    <span>Tickets: {ticket_links_or_dash}</span>
+  </div>
+
+</div></body>
 </html>
 ```
 
-The emoji in the chips and section headers are part of the report UI (they help scanning), not documentation prose, so they are fine here. Show a dash for Tickets when none are found; when `issue_tracker.base_url` is null, render ticket IDs as plain text.
+`{verdict_class}`/`{verdict_label}` summarise the PR at a glance: `crit`/"Changes needed" if any critical, else `imp`/"Review carefully" if any important, else `sug`/"Looks good". `{anchor}` is a unique slug per finding (e.g. `c1`, `i2`). Show a dash for Tickets when none are found; when `issue_tracker.base_url` is null, render ticket IDs as plain text. The emoji in the header are UI affordances, not prose, so they are fine here.
 
 ### Notification template
 
+The Slack tool renders standard markdown (headers, bold, links). Use a title and subtitle, a short summary, a findings line, and two clickable links. The review link uses a `file://` URL so it opens the local HTML report in the browser.
+
 ```
-New PR from {author}: {title}
+## New PR to review
+### {title}
+
+**{author}** · `{repo}`{ticket_suffix}
+
 {one sentence on what the PR does}
-PR: {pr_url}
-Review: {report_path}
+
+🔴 {n_critical} critical · 🟠 {n_important} important · 🟢 {n_suggestions} suggestions
+
+📄 [Open review in browser]({file_url})  ·  🔗 [View PR on GitHub]({pr_url})
 ```
+
+`{file_url}` is `file://` + the absolute report path. `{ticket_suffix}` is ` · 🎫 [{TICKET}]({base_url}{TICKET})` when a ticket is found (normalize the separator to a hyphen), or empty otherwise. Keep the summary to one sentence so the message stays scannable.
+
+For the `webhook` notify type, POST the same data as JSON (`title, author, repo, summary, pr_url, report_path, file_url`) instead of formatting markdown.
